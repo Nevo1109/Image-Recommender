@@ -1,0 +1,96 @@
+import h5py
+import sqlite3
+import faiss
+import numpy as np
+import os
+import cv2
+from torchvision import transforms
+from PIL import Image
+from torchvision.models import vit_b_16
+import torch
+from sklearn.preprocessing import normalize
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
+# === Einstellungen ===
+EXAMPLE_IMAGE_PATH = r"C:\Users\kilic\OneDrive\Pictures\renkler-ve-anlamlari-1749.jpg"
+DB_PATH = r"C:\Users\kilic\OneDrive\Desktop\db\image_comparison.db"
+H5_PATH = r"C:\Users\kilic\OneDrive\Desktop\db\vit_b_16_embeddings.h5"
+TOP_K = 5
+
+# === Bildvorverarbeitung ===
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor()
+])
+
+def lade_bild_embedding(bild_pfad, model):
+    image = Image.open(bild_pfad).convert("RGB")
+    input_tensor = transform(image).unsqueeze(0)
+    with torch.no_grad():
+        embedding = model(input_tensor).numpy()
+    return embedding
+
+# === Lade ViT-Modell ===
+vit = vit_b_16(weights="IMAGENET1K_V1")
+vit.eval()
+
+# === Lade Embeddings aus .h5 ===
+print("Lade Embeddings...")
+with h5py.File(H5_PATH, "r") as f:
+    embeddings = f["embeddings"][:]
+    ids = f["ids"][:]
+
+# === Normalisiere Embeddings für FAISS-Suche ===
+embeddings = normalize(embeddings)
+
+# === Erzeuge FAISS-Index ===
+index = faiss.IndexFlatIP(embeddings.shape[1])
+index.add(embeddings)
+
+# === Berechne Embedding vom Eingabebild ===
+print("Berechne Embedding für Eingabebild...")
+query_embedding = lade_bild_embedding(EXAMPLE_IMAGE_PATH, vit)
+query_embedding = normalize(query_embedding)
+
+# === Suche mit FAISS ===
+print("Suche ähnliche Bilder mit FAISS...")
+D, I = index.search(query_embedding, TOP_K)
+
+ähnlichste_ids = [int(ids[i]) for i in I[0]]
+ähnlichste_scores = D[0]
+
+# === Lade Pfade aus der Datenbank ===
+def lade_pfade_aus_db(db_path, bild_ids):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    placeholder = ",".join(["?"] * len(bild_ids))
+    query = f"SELECT id_image, path FROM images WHERE id_image IN ({placeholder})"
+    cursor.execute(query, bild_ids)
+    results = dict(cursor.fetchall())
+    conn.close()
+    return results
+
+pfade = lade_pfade_aus_db(DB_PATH, ähnlichste_ids)
+
+print("\nTop-ähnliche Bilder:")
+for i, (bild_id, score) in enumerate(zip(ähnlichste_ids, ähnlichste_scores)):
+    pfad = pfade.get(bild_id, "Pfad nicht gefunden")
+    if pfad.startswith("E:\\"):
+        pfad = pfad.replace("E:\\", "D:\\")
+    existiert = os.path.exists(pfad)
+    print(f"{i+1}. ID: {bild_id} | Score: {score:.4f} | Pfad: {pfad} | Gefunden: {existiert}")
+    
+    # Bild anzeigen, falls vorhanden
+    if existiert:
+        img = cv2.imread(pfad)
+        if img is not None:
+            # Fenstername mit Index und Score
+            fenstername = f"Bild {i+1} | ID {bild_id} | Score {score:.4f}"
+            cv2.imshow(fenstername, img)
+        else:
+            print(f"Warnung: Bild konnte nicht geladen werden: {pfad}")
+
+print("\nDrücke eine beliebige Taste in einem Bildfenster, um alle zu schließen.")
+cv2.waitKey(0)
+cv2.destroyAllWindows()
