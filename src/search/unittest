@@ -1,0 +1,28 @@
+import pytest
+import numpy as np
+from finalfaiss import calculate_color_histogram_similarity, calculate_phash_similarity
+import sqlite3
+
+# Beispielhafte Dummy-Bilder als Arrays
+def test_color_histogram_similarity():
+    img1 = np.ones((100, 100, 3), dtype=np.uint8) * 255
+    img2 = np.ones((100, 100, 3), dtype=np.uint8) * 200
+    score = calculate_color_histogram_similarity(img1, img2)
+    assert 0.0 <= score <= 1.0
+
+
+def test_phash_similarity():
+    from PIL import Image
+    img1 = Image.new("RGB", (100, 100), color="white")
+    img2 = Image.new("RGB", (100, 100), color="gray")
+    score = calculate_phash_similarity(img1, img2)
+    assert isinstance(score, float)
+
+
+def test_database_connection():
+    conn = sqlite3.connect("db/image_comparison.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = cursor.fetchall()
+    assert any("images" in t for t in tables)
+    conn.close()
