@@ -1,0 +1,107 @@
+import os
+import cv2
+import sqlite3
+import numpy as np
+import h5py
+from PIL import Image
+from sklearn.preprocessing import normalize
+from torchvision import transforms
+from torchvision.models import vit_b_16
+import torch
+import faiss
+import imagehash
+from tqdm import tqdm
+import warnings
+warnings.filterwarnings("ignore")
+
+DB_PATH = r"C:\Users\kilic\OneDrive\Desktop\db\image_comparison.db"
+H5_PATH = r"C:\Users\kilic\OneDrive\Desktop\db\vit_b_16_embeddings.h5"
+INPUT_IMAGES = [
+    r"C:\Users\kilic\OneDrive\Pictures\renkler-ve-anlamlari-1749.jpg",
+    # Weitere Eingabebilder hier hinzufügen
+]
+TOP_K = 5
+
+# TRANSFORMATION für Deep Learning Modell
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor()
+])
+
+# ViT-Modell 
+vit = vit_b_16(weights="IMAGENET1K_V1")
+vit.eval()
+
+# Farbhistogramm-Vergleich 
+def farbhistogramm_score(img1, img2):
+    hsv1 = cv2.cvtColor(img1, cv2.COLOR_BGR2HSV)
+    hsv2 = cv2.cvtColor(img2, cv2.COLOR_BGR2HSV)
+    hist1 = cv2.calcHist([hsv1], [0, 1], None, [50, 60], [0, 180, 0, 256])
+    hist2 = cv2.calcHist([hsv2], [0, 1], None, [50, 60], [0, 180, 0, 256])
+    cv2.normalize(hist1, hist1, 0, 1, cv2.NORM_MINMAX)
+    cv2.normalize(hist2, hist2, 0, 1, cv2.NORM_MINMAX)
+    return cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)
+
+#  Hash-Ähnlichkeit (Perceptual Hashing) 
+def hash_score(img1, img2):
+    img1_pil = Image.fromarray(cv2.cvtColor(img1, cv2.COLOR_BGR2RGB))
+    img2_pil = Image.fromarray(cv2.cvtColor(img2, cv2.COLOR_BGR2RGB))
+    hash1 = imagehash.average_hash(img1_pil)
+    hash2 = imagehash.average_hash(img2_pil)
+    return 1 - (hash1 - hash2) / len(hash1.hash) ** 2
+
+# Lade Bild aus Pfad 
+def safe_load(pfad):
+    if pfad.startswith("E:\\"):
+        pfad = pfad.replace("E:\\", "D:\\")
+    if os.path.exists(pfad):
+        return cv2.imread(pfad)
+    return None
+
+# Lade Embeddings + IDs 
+with h5py.File("C:\Users\kilic\OneDrive\Desktop\db\vit_b_16_embeddings.h5", "r") as f:
+    embeddings = f["embeddings"][:]
+    ids = f["ids"][:]
+
+# Normalisiere Embeddings 
+embeddings = normalize(embeddings)
+index = faiss.IndexFlatIP(embeddings.shape[1])
+index.add(embeddings)
+
+# DB-Pfade laden 
+def lade_pfade(db_path, bild_ids):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT id_image, path FROM images WHERE id_image IN ({','.join(['?']*len(bild_ids))})", bild_ids)
+    result = dict(cursor.fetchall())
+    conn.close()
+    return result
+
+# Kombiniertes Embedding berechnen 
+def kombiniertes_embedding(pfade):
+    with torch.no_grad():
+        vecs = []
+        for pfad in pfade:
+            img = Image.open(pfad).convert("RGB")
+            tens = transform(img).unsqueeze(0)
+            vec = vit(tens).numpy()
+            vecs.append(vec)
+        return normalize(np.mean(vecs, axis=0))
+
+query_embedding = kombiniertes_embedding(INPUT_IMAGES)
+D, I = index.search(query_embedding, TOP_K)
+ähnlichste_ids = [int(ids[i]) for i in I[0]]
+ähnlichste_scores = D[0]
+pfade = lade_pfade(DB_PATH, ähnlichste_ids)
+
+print("Top-5 Ergebnisse (ViT Embedding + weitere Metriken):\n")
+for i, (bild_id, score) in enumerate(zip(ähnlichste_ids, ähnlichste_scores)):
+    pfad = pfade.get(bild_id, "Pfad nicht gefunden")
+    img = safe_load(pfad)
+    farb_score = hash_score_score = None
+    if img is not None:
+        farb_score = farbhistogramm_score(cv2.imread(INPUT_IMAGES[0]), img)
+        hash_score_score = hash_score(cv2.imread(INPUT_IMAGES[0]), img)
+    print(f"{i+1}. ID: {bild_id} | Pfad: {pfad} | ViT-Score: {score:.4f} | Farb: {farb_score:.4f} | Hash: {hash_score_score:.4f}")
+
+print("\nFertig.")
