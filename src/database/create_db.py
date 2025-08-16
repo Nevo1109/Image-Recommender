@@ -100,7 +100,7 @@ def insert_sizes(db_path=None, chunck_size=10_000):
     for i in range(chunks):
         idcs = remaining_indices[i * chunck_size : (i + 1) * chunck_size]
         paths = remaining_paths[i * chunck_size : (i + 1) * chunck_size]
-        with ThreadPoolExecutor(max_workers=24) as executor:
+        with ThreadPoolExecutor(max_workers=6) as executor:
             sizes = list(
                 tqdm(
                     executor.map(get_image_size, paths),

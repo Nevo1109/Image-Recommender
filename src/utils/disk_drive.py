@@ -12,10 +12,13 @@ def get_drive_letter() -> str:
             return drive[0]  # only letter
     raise Exception("Drive could not be found automaticly.")
 
-def get_db_path():
-    """Get default database path on image storage drive"""
+def get_data_folder():
+    """Get default recommender data on image storage drive"""
     drive = get_drive_letter()
-    return f"{drive}:\\data\\recommender_data\\images.db"
+    return drive + ":\\data\\recommender_data"
+
+def get_db_path():
+    return get_data_folder() + "\\images.db"
 
 def get_images_folder():
     """Get default image folder path on image storage drive"""
