@@ -49,3 +49,4 @@ python recommend.py --query path/to/example.jpg --top_n 5
 
 Apply UMAP on embeddings to reduce dimensionality and visualize relationships in 3D space.
 
+<img width="729" height="779" alt="Untitled (1)" src="https://github.com/user-attachments/assets/c44eaff9-3cec-43a2-89d4-a09171be9a79" />
