@@ -96,31 +96,55 @@ def find_nearest_hashes(path: str, mode: str = "pHash", n: int = 5) -> Tuple[np.
         # If no non-zero distances (shouldn't happen), return all
         return distances[0][:n], indices[0][:n]
 
-
-def compare_color_distributions(colors1: np.ndarray, counts1: np.ndarray, 
-                               colors2: np.ndarray, counts2: np.ndarray) -> float:
-    """Compare color distributions using Wasserstein distance."""
-    distances = []
+@numba.jit(nopython=True, parallel=True)
+def fast_color_distance_batch(query_colors, query_weights, all_colors, all_weights):
+    """Vectorized color distance computation with numba acceleration."""
+    n_images = all_colors.shape[0]
+    distances = np.empty(n_images, dtype=np.float32)
     
-    for dim in range(colors1.shape[1]):  # For each color channel
-        try:
-            dist = wasserstein_distance(
-                colors1[:, dim], colors2[:, dim],
-                u_weights=counts1, v_weights=counts2
-            )
-            distances.append(dist)
-        except Exception as e:
-            print(f"Error in Wasserstein distance calculation: {e}")
-            distances.append(float('inf'))
+    # Normalize query weights
+    query_sum = np.sum(query_weights)
+    if query_sum > 0:
+        query_w = query_weights / query_sum
+    else:
+        query_w = np.ones_like(query_weights) / len(query_weights)
     
-    return np.mean(distances)
+    for img_idx in numba.prange(n_images):
+        total_dist = 0.0
+        
+        # Query to target (weighted by query colors)
+        for i in numba.prange(len(query_colors)):
+            if query_w[i] <= 0:
+                continue
+                
+            min_dist = 999999.0
+            for j in range(len(all_colors[img_idx])):
+                # Simple L2 distance between colors
+                diff = 0.0
+                for k in range(3):  # RGB/LAB/HSV channels
+                    d = query_colors[i][k] - all_colors[img_idx][j][k]
+                    diff += d * d
+                dist = diff ** 0.5
+                if dist < min_dist:
+                    min_dist = dist
+            
+            total_dist += query_w[i] * min_dist
+        
+        distances[img_idx] = total_dist
+    
+    return distances
 
 
 def find_nearest_kmeans(image_path: str, n: int = 5, n_jobs: int = 6) -> Tuple[np.ndarray, np.ndarray]:
-    """Find similar images using K-means color clustering."""
+    """Find similar images using K-means color clustering - optimized version."""
     preprocessed = load_and_preprocess_image(image_path)
     pixels = preprocessed.reshape(-1, 3)
     target_colors, target_counts = extract_colors_kmeans(pixels, n=5)
+    
+    # Ensure valid weights
+    target_counts = target_counts.astype(np.float32)
+    if target_counts.sum() == 0:
+        target_counts = np.ones_like(target_counts)
     
     kmeans_file = os.path.join(get_data_folder(), "kmeans_5_hsv.h5")
     if not os.path.exists(kmeans_file):
@@ -128,35 +152,30 @@ def find_nearest_kmeans(image_path: str, n: int = 5, n_jobs: int = 6) -> Tuple[n
     
     with h5py.File(kmeans_file, 'r') as f:
         ids = f["ids"][()]
-        colors = f["colors"][()]
-        counts = f["counts"][()]
+        colors = f["colors"][()]  # Shape: (N, 5, 3)
+        counts = f["counts"][()]  # Shape: (N, 5)
     
-    def compute_distance(i: int) -> float:
-        try:
-            return compare_color_distributions(
-                target_colors, target_counts, colors[i], counts[i]
-            )
-        except Exception:
-            return float('inf')
+    # Convert to float32 for speed
+    colors = colors.astype(np.float32)
+    counts = counts.astype(np.float32)
+    target_colors = target_colors.astype(np.float32)
     
-    # Parallel distance computation
-    distances = Parallel(n_jobs=n_jobs, backend='threading')(
-        delayed(compute_distance)(i) for i in range(len(ids))
+    print(f"Computing distances for {len(ids)} images...")
+    
+    # Warmup numba with first few images
+    if len(colors) > 0:
+        _ = fast_color_distance_batch(
+            target_colors, target_counts, colors[:4], counts[:4]
+        )
+    
+    # Compute all distances
+    distances = fast_color_distance_batch(
+        target_colors, target_counts, colors, counts
     )
     
-    distances = np.array(distances)
-    
     # Find top n results
-    valid_mask = ~np.isinf(distances)
-    if not valid_mask.any():
-        raise ValueError("No valid distances computed")
-    
-    valid_indices = np.where(valid_mask)[0]
-    valid_distances = distances[valid_indices]
-    
-    n_results = min(n, len(valid_distances))
-    top_local_indices = np.argpartition(valid_distances, n_results)[:n_results]
-    top_indices = valid_indices[top_local_indices]
+    n_results = min(n, len(distances))
+    top_indices = np.argpartition(distances, n_results)[:n_results]
     
     # Sort by distance
     sorted_order = np.argsort(distances[top_indices])
@@ -166,26 +185,47 @@ def find_nearest_kmeans(image_path: str, n: int = 5, n_jobs: int = 6) -> Tuple[n
     return ids[final_indices], final_distances
 
 
+
 @numba.jit(nopython=True, parallel=True)
 def bhattacharyya_batch(query: np.ndarray, all_hists: np.ndarray) -> np.ndarray:
-    """Compute Bhattacharyya distances in parallel."""
+    """Compute Bhattacharyya distances in parallel - FIXED VERSION."""
     n_samples = all_hists.shape[0]
     n_features = query.shape[0]
     distances = np.empty(n_samples, dtype=np.float32)
     
+    # Normalize query histogram once
+    query_sum = np.sum(query)
+    if query_sum > 0:
+        query_norm = query / query_sum
+    else:
+        query_norm = query.copy()
+    
     for i in numba.prange(n_samples):
+        # Normalize current histogram
+        hist_sum = 0.0
+        for j in range(n_features):
+            hist_sum += all_hists[i, j]
+        
+        if hist_sum <= 0:
+            distances[i] = 10.0  # Maximum distance for empty histograms
+            continue
+            
+        # Calculate Bhattacharyya coefficient with normalized histograms
         bc = 0.0
         for j in range(n_features):
-            bc += math.sqrt(max(query[j] * all_hists[i, j], 1e-15))
+            hist_norm_j = all_hists[i, j] / hist_sum
+            bc += math.sqrt(query_norm[j] * hist_norm_j)
         
-        bc = max(bc, 1e-10)
+        # Bhattacharyya distance = -ln(BC)
+        # BC should be in [0,1] for normalized histograms
+        bc = max(min(bc, 1.0), 1e-10)  # Clamp to valid range
         distances[i] = -math.log(bc)
     
     return distances
 
 
 def find_nearest_histograms(image_path: str, n: int = 5, mode: str = "full") -> Tuple[np.ndarray, np.ndarray]:
-    """Find similar images using color histograms."""
+    """Find similar images using color histograms - fixed version."""
     hist_file = os.path.join(get_data_folder(), "histograms_32_hsv.h5")
     if not os.path.exists(hist_file):
         raise FileNotFoundError(f"Histogram file not found: {hist_file}")
@@ -194,7 +234,7 @@ def find_nearest_histograms(image_path: str, n: int = 5, mode: str = "full") -> 
         if mode == "accelerated":
             # Use color hash to pre-filter candidates
             try:
-                _, candidate_ids = find_nearest_hashes(image_path, "colorHash", 5000)
+                _, candidate_ids = find_nearest_hashes(image_path, "colorHash", 1000)
                 
                 all_ids = f["ids"][()]
                 # Find indices of candidates in histogram file
@@ -218,16 +258,36 @@ def find_nearest_histograms(image_path: str, n: int = 5, mode: str = "full") -> 
             ids = f["ids"][()]
             histograms = f["histograms"][()]
     
-    # Compute query histogram
+    # Convert to float32 for numba compatibility
+    histograms = histograms.astype(np.float32)
+    
+    # Compute query histogram with matching color space
     preprocessed = load_and_preprocess_image(image_path)
-    _, query_hist = extract_lab_pair_histogram(None, preprocessed, bins=32)
+    
+    # Check what colorspace the existing histograms use
+    with h5py.File(hist_file, "r") as f:
+        hist_colorspace = f.attrs.get("colorspace", "hsv")
+    
+    # Convert preprocessed image to match the histogram colorspace
+    if hist_colorspace == "rgb":
+        # If histograms were made with "rgb" but actually BGR, keep as BGR
+        query_img = preprocessed  # Keep BGR for consistency with existing histograms
+    else:
+        query_img = preprocessed  # HSV/LAB should be fine
+        
+    _, query_hist = extract_lab_pair_histogram(None, query_img, bins=32, colorspace=hist_colorspace)
     
     if query_hist is None:
         raise ValueError("Could not compute histogram for query image")
     
-    # Warmup numba
+    # Convert query histogram to float32
+    query_hist = query_hist.astype(np.float32)
+    
+    # Warmup numba with small batch
     if len(histograms) > 0:
         _ = bhattacharyya_batch(query_hist, histograms[:4])
+    
+    print(f"Computing histogram distances for {len(ids)} images...")
     
     # Compute distances
     scores = bhattacharyya_batch(query_hist, histograms)
@@ -339,7 +399,7 @@ def main():
         print("(1) Perceptual Hash")
         print("(2) Color Hash") 
         print("(3) Color Histogram (full)")
-        print("(4) Color Histogram (accelerated)")
+        print("(4) Color Histogram (cHash accelerated)")
         print("(5) K-Means Color Clustering")
         
         try:
