@@ -1,14 +1,17 @@
 import sqlite3
 import numpy as np
 import h5py
-from PIL import Image
-from torchvision import models
 import torch
 import faiss
+from PIL import Image
+from torchvision import models
+from tkinter import filedialog as fd
 
-EXAMPLE_IMAGE_PATH = r"C:\Users\kilic\OneDrive\Desktop\example.jpg"
-DB_PATH = r"C:\Users\kilic\OneDrive\Desktop\db\image_recommender.db"
-H5_PATH = r"C:\Users\kilic\OneDrive\Desktop\db\vit_b_16_embeddings(no_compr).h5"
+from src.utils.disk_drive import get_data_folder, get_images_folder
+from src.search.search import preprocess
+
+DB_PATH = get_data_folder() + "\\image_recommender.db"
+H5_PATH = get_data_folder() + "\\vit_b_16_embeddings.h5"
 TOP_N = 5
 
 # === MODEL & TRANSFORM ===
@@ -62,12 +65,19 @@ def find_similar_images_faiss(query_embedding, all_embeddings, all_ids, top_n=5)
     return results
 
 def main():
+    paths = fd.askopenfilenames(title="Select one or two images", initialdir=get_images_folder())[:2]
+        
     print("Lade Embeddings...")
     ids, embeddings = load_embeddings(H5_PATH)
 
     print("Berechne Embedding für Eingabebild...")
-    query_emb = compute_embedding(EXAMPLE_IMAGE_PATH)
-
+    if len(paths) == 1:
+        query_emb = compute_embedding(paths[0])
+    if len(paths) == 2:
+        a = input("Mit wie viel Prozent soll das erste Bild gewichtet werden?\n")
+        a = float(a) / 100
+        query_emb = a * compute_embedding(paths[0]) + (1 - a) * compute_embedding(paths[1])
+        
     print("Suche Top ähnliche Bilder mit Faiss...")
     top_matches = find_similar_images_faiss(query_emb, embeddings, ids, top_n=TOP_N)
 
