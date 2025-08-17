@@ -1,27 +1,23 @@
-import os, sqlite3, torch, numpy as np
-from PIL import Image
+import sqlite3, torch, h5py
 from torch.utils.data import DataLoader
 from torchvision import models, set_image_backend
-from utils.dataset import ImageDataset, safe_collate
 from tqdm import tqdm
+
+from src.utils.dataset import ImageDataset, safe_collate
+from src.utils.disk_drive import get_data_folder
 
 set_image_backend("accimage")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def save_embeddings_to_db(indices, embeddings, db_path):
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("BEGIN")
-    cursor.executemany(
-        "INSERT OR REPLACE INTO vit_b_16_embeddings (id_image, embedding) VALUES (?, ?)",
-        [(int(i), sqlite3.Binary(emb.tobytes())) for i, emb in zip(indices, embeddings)]
-    )
-    conn.commit()
-    conn.close()
+def save_embeddings_to_h5(indices, embeddings, h5_path):
+    with h5py.File(h5_path, "w-") as f:
+        f.create_dataset("ids", data=indices)
+        f.create_dataset("embeddings", data=embeddings)
 
 def main(batch_size=32):
-    db_path = r"C:\Users\kilic\OneDrive\Desktop\db\image_recommender.db"
+    db_path = get_data_folder() + "\\image_recommender.db"
+    h5_path = get_data_folder() + "\\vit_b_16_embeddings.h5"
 
     weights = models.ViT_B_16_Weights.IMAGENET1K_SWAG_E2E_V1
     model = models.vit_b_16(weights=weights)
@@ -32,19 +28,9 @@ def main(batch_size=32):
     cursor = conn.cursor()
 
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS vit_b_16_embeddings (
-            id_image INTEGER PRIMARY KEY,
-            embedding BLOB,
-            FOREIGN KEY (id_image) REFERENCES images(id_image)
-        )
-    """)
-    conn.commit()
-
-    cursor.execute("""
-        SELECT id_image, path FROM images
-        WHERE id_image NOT IN (
-            SELECT id_image FROM vit_b_16_embeddings
-        )
+        SELECT i.id_image, i.path FROM images as i
+        INNER JOIN metadata as m ON m.id_image = i.id_image
+        WHERE m.size IS NOT NULL
     """)
     image_data = cursor.fetchall()
     conn.close()
@@ -67,7 +53,7 @@ def main(batch_size=32):
         images = images.to(device)
         with torch.no_grad():
             embeddings = model(images).cpu().numpy()
-        save_embeddings_to_db(indices, embeddings, db_path)
+        save_embeddings_to_h5(indices, embeddings, h5_path)
 
     print("Embeddings gespeichert.")
 

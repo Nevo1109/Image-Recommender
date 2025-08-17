@@ -76,7 +76,7 @@ class JPEGDataset(Dataset):
 class ImageDataset(Dataset):
     def __init__(self, indexed_paths, transform=None):
         self.indexed_paths = indexed_paths
-        self.transform = transforms or models.ViT_B_16_Weights.IMAGENET1K_SWAG_E2E_V1.transforms() 
+        self.transform = transform or models.ViT_B_16_Weights.IMAGENET1K_SWAG_E2E_V1.transforms() 
 
     def __len__(self):
         return len(self.indexed_paths)
