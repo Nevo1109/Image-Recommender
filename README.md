@@ -1,32 +1,41 @@
-Image Recommender
-Overview
+# Image Recommender
+
+## Overview
 This project implements a complete image recommendation and similarity search system. It combines multiple approaches for feature extraction, clustering, and efficient retrieval. The system is designed to handle large image collections and provides several methods to measure similarity between images.
+
 The project includes:
-•	Backend for image processing, feature extraction, clustering, and similarity search
-•	Persistence using SQLite and HDF5 files
-•	Algorithms such as K-Means clustering, LAB color histograms, perceptual hashing (pHash), color hashing, deep learning–based embeddings, and FAISS-based approximate nearest neighbor search
-•	(Optional) A web-based frontend using Plotly Dash for interactive exploration and visualization
-________________________________________
-Features
-•	Preprocessing of all images (resizing, normalization)
-•	Storage of image paths and metadata in a relational database
-•	Feature extraction via:
-o	LAB color histograms (3D)
-o	Perceptual hash (pHash)
-o	Color hash
-o	Vision Transformer (ViT) embeddings
-•	Combination of features for robust similarity search
-•	Clustering with K-Means to group visually similar images
-•	Efficient nearest-neighbor search with FAISS
-•	(Optional) UMAP projection of embeddings into 3D for visualization
-•	(Optional) Web interface with:
-o	Accordion panel for weighting histogram scores via slider
-o	Method selection between pHash and Color Hash
-o	Cluster-based prefiltering checkbox
-o	Results visualization with similarity contributions (blue: embedding, green: color, yellow: structural similarity)
+
+- Backend for image processing, feature extraction, clustering, and similarity search
+- Persistence using SQLite and HDF5 files
+- Algorithms such as K-Means clustering, LAB color histograms, perceptual hashing (pHash), color hashing, deep learning–based embeddings, and FAISS-based approximate nearest neighbor search
+- (Optional) A web-based frontend using Plotly Dash for interactive exploration and visualization
+
+---
+
+## Features
+
+- Preprocessing of all images (resizing, normalization)
+- Storage of image paths and metadata in a relational database
+- Feature extraction via:
+  - LAB color histograms (3D)
+  - Perceptual hash (pHash)
+  - Color hash
+  - Vision Transformer (ViT) embeddings
+- Combination of features for robust similarity search
+- Clustering with K-Means to group visually similar images
+- Efficient nearest-neighbor search with FAISS
+- (Optional) UMAP projection of embeddings into 3D for visualization
+- (Optional) Web interface with:
+  - Accordion panel for weighting histogram scores via slider
+  - Method selection between pHash and Color Hash
+  - Cluster-based prefiltering checkbox
+  - Results visualization with similarity contributions:
+    - blue: embedding
+    - green: color
+    - yellow: structural similarity
 
 
-- Image-Recommender/
+## Image-Recommender/
   - Src/
     - application/ (Optional web frontend)
       - assets/ (Static assets: CSS, JS)
