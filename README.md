@@ -30,37 +30,31 @@ o	Results visualization with similarity contributions (blue: embedding, green: c
 
 
 Image-Recommender/
-Src/
-│
-├── application/              # Optional web frontend
-│   ├── assets/               # Static assets (CSS, JS)
-│   ├── callbacks.py          # Dash callbacks
-│   ├── components.py         # UI components
-│   ├── config.py             # App configuration
-│   ├── main.py               # Entry point for the web app
-│   ├── styles.py             # Style definitions
-│   └── utils.py              # Helper functions for the app
-│
-├── database/                 # Database handling
-│   └── create_db.py          # Initialize and populate SQLite DB
-│
-├── features/                 # Feature extraction methods
-│   ├── compute_embeddings.py # Embedding extraction (e.g., ViT)
-│   ├── hashing.py            # Perceptual & color hashing
-│   ├── histograms.py         # LAB color histograms
-│   └── kmeans.py             # K-Means clustering
-│
-├── search/                   # Similarity search
-│   ├── embeddings_faiss.py   # FAISS for embeddings
-│   └── ...
-│
-├── utils/                    # Utility scripts
-│   ├── dataset.py            # Dataset loading
-│   ├── disk_drive.py         # File I/O helpers
-│   └── preprocess_resize.py  # Preprocessing & resizing
-││
-├── requirements.txt          # Python dependencies
-└── README.md                 # Project documentation
+├── Src/
+│   ├── application/        # Optional web frontend
+│   │   ├── assets/         # Static assets (CSS, JS)
+│   │   ├── callbacks.py    # Dash callbacks
+│   │   ├── components.py   # UI components
+│   │   ├── config.py       # App configuration
+│   │   ├── main.py         # Entry point for the web app
+│   │   ├── styles.py       # Style definitions
+│   │   └── utils.py        # Helper functions for the app
+│   ├── database/           # Database handling
+│   │   └── create_db.py    # Initialize and populate SQLite DB
+│   ├── features/           # Feature extraction methods
+│   │   ├── compute_embeddings.py # Embedding extraction (e.g., ViT)
+│   │   ├── hashing.py      # Perceptual & color hashing
+│   │   ├── histograms.py   # LAB color histograms
+│   │   └── kmeans.py       # K-Means clustering
+│   ├── search/             # Similarity search
+│   │   ├── embeddings_faiss.py # FAISS for embeddings
+│   │   └── ...
+│   ├── utils/              # Utility scripts
+│   │   ├── dataset.py      # Dataset loading
+│   │   ├── disk_drive.py   # File I/O helpers
+│   │   └── preprocess_resize.py # Preprocessing & resizing
+├── requirements.txt        # Python dependencies
+└── README.md               # Project documentation
 
 
 <img width="729" height="779" alt="Untitled (1)" src="https://github.com/user-attachments/assets/c44eaff9-3cec-43a2-89d4-a09171be9a79" />
