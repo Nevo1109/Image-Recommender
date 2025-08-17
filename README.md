@@ -29,6 +29,7 @@ Resize all images to 65,536 px resolution for consistent input.
 
 Run the hashing pipeline to compute perceptual and color hashes:
 bash:
+
 python hash_pipeline.py path/to/images.h5 --phash_bits 1024 --color_bits 1024
 
 This will save results in .h5 format and create a combined FAISS index.
@@ -41,6 +42,7 @@ Extract feature embeddings using ViT-B/16 and store them in .h5 files.
 
 Use FAISS to find the top-N most similar images for a given query:
 bash:
+
 python recommend.py --query path/to/example.jpg --top_n 5
 
 6. Visualization
