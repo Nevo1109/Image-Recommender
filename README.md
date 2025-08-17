@@ -1,51 +1,113 @@
-# Image-Recommender
-An intelligent image recommendation system based on visual similarity.
-
-Project Objective
-
-The goal of this project is to develop an intelligent image recommendation system that identifies and returns visually similar images from a dataset of approximately 500,000 images. The system is designed to support multiple similarity measures, ensure fast search performance, and provide a modular, well-documented Python implementation.
-
+Image Recommender
+Overview
+This project implements a complete image recommendation and similarity search system. It combines multiple approaches for feature extraction, clustering, and efficient retrieval. The system is designed to handle large image collections and provides several methods to measure similarity between images.
+The project includes:
+•	Backend for image processing, feature extraction, clustering, and similarity search
+•	Persistence using SQLite and HDF5 files
+•	Algorithms such as K-Means clustering, LAB color histograms, perceptual hashing (pHash), color hashing, deep learning–based embeddings, and FAISS-based approximate nearest neighbor search
+•	(Optional) A web-based frontend using Plotly Dash for interactive exploration and visualization
+________________________________________
 Features
+•	Preprocessing of all images (resizing, normalization)
+•	Storage of image paths and metadata in a relational database
+•	Feature extraction via:
+o	LAB color histograms (3D)
+o	Perceptual hash (pHash)
+o	Color hash
+o	Vision Transformer (ViT) embeddings
+•	Combination of features for robust similarity search
+•	Clustering with K-Means to group visually similar images
+•	Efficient nearest-neighbor search with FAISS
+•	(Optional) UMAP projection of embeddings into 3D for visualization
+•	(Optional) Web interface with:
+o	Accordion panel for weighting histogram scores via slider
+o	Method selection between pHash and Color Hash
+o	Cluster-based prefiltering checkbox
+o	Results visualization with similarity contributions (blue: embedding, green: color, yellow: structural similarity)
 
-- **Database management**: Store image paths and metadata in a SQLite database.  
-- **Preprocessing**: Resize images to a uniform resolution (65,536 px) for consistent input.  
-- **Perceptual hashing (pHash)**: Robust similarity measure based on frequency domain features.  
-- **Color hashing**: LAB color space histograms with both separate and combined (3D) bins.  
-- **Embeddings**: Use pre-trained ViT-B/16 (Vision Transformer) to extract feature embeddings.  
-- **Similarity search**: Approximate nearest neighbor search using FAISS for large-scale datasets.  
-- **Visualization**: Dimensionality reduction with UMAP to project embeddings into 3D.  
-- **Optional labeling**: Generate semantic labels with a model to enrich visualization.
+
+
+
+
+Image-Recommender/
+Src/
+│
+├── application/              # Optional web frontend
+│   ├── assets/               # Static assets (CSS, JS)
+│   ├── callbacks.py          # Dash callbacks
+│   ├── components.py         # UI components
+│   ├── config.py             # App configuration
+│   ├── main.py               # Entry point for the web app
+│   ├── styles.py             # Style definitions
+│   └── utils.py              # Helper functions for the app
+│
+├── database/                 # Database handling
+│   └── create_db.py          # Initialize and populate SQLite DB
+│
+├── features/                 # Feature extraction methods
+│   ├── compute_embeddings.py # Embedding extraction (e.g., ViT)
+│   ├── hashing.py            # Perceptual & color hashing
+│   ├── histograms.py         # LAB color histograms
+│   └── kmeans.py             # K-Means clustering
+│
+├── search/                   # Similarity search
+│   ├── embeddings_faiss.py   # FAISS for embeddings
+│   └── ...
+│
+├── utils/                    # Utility scripts
+│   ├── dataset.py            # Dataset loading
+│   ├── disk_drive.py         # File I/O helpers
+│   └── preprocess_resize.py  # Preprocessing & resizing
+││
+├── requirements.txt          # Python dependencies
+└── README.md                 # Project documentation
+
+
+<img width="729" height="779" alt="Untitled (1)" src="https://github.com/user-attachments/assets/c44eaff9-3cec-43a2-89d4-a09171be9a79" />
+Installation
+
+Clone the repository:
+
+git clone https://github.com/Nevo1109/Image-Recommender.git
+cd Image-Recommender
+
+
+Create a virtual environment (recommended):
+
+python -m venv venv
+source venv/bin/activate    # on Linux/Mac
+venv\Scripts\activate       # on Windows
+
+
+Install dependencies:
+
+pip install -r requirements.txt
 
 Usage
-1. Database creation
+1. Create database and preprocess images
+python database/create_db.py --input data/images --output db/images.db
+python utils/preprocess_resize.py --input data/images --output data/resized
 
-Create a SQLite database and store image paths along with metadata (e.g., size).
+2. Compute features
+python features/hashing.py
+python features/histograms.py
+python features/compute_embeddings.py
+python features/kmeans.py
 
-2. Preprocessing
+3. Run similarity search
+python search/embeddings_faiss.py
 
-Resize all images to 65,536 px resolution for consistent input.
+4. (Optional) Start the web application
+python application/main.py
 
-3. Hash extraction
+Future Work
 
-Run the hashing pipeline to compute perceptual and color hashes:
-bash:
+Label generation for UMAP visualization
 
-python hash_pipeline.py path/to/images.h5 --phash_bits 1024 --color_bits 1024
+Extended weighting strategies for feature fusion
 
-This will save results in .h5 format and create a combined FAISS index.
+Support for additional embedding models
 
-4. Embeddings
+License
 
-Extract feature embeddings using ViT-B/16 and store them in .h5 files.
-
-5. Similarity search
-
-Use FAISS to find the top-N most similar images for a given query:
-bash:
-
-python recommend.py --query path/to/example.jpg --top_n 5
-
-6. Visualization
-
-Apply UMAP on embeddings to reduce dimensionality and visualize relationships in 3D space.
-
+This project is provided for academic and research purposes. See LICENSE for details.
