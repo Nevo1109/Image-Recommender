@@ -87,7 +87,7 @@ def extract_hashes(data: tuple):
 
 def save_results(output_dir: str, ids: np.ndarray, phashes: np.ndarray, colorhashes: np.ndarray, 
                 phash_bits: int, color_bits: int):
-    """Save hashes to HDF5 and create combined FAISS index."""
+    """Save hashes to HDF5 and create separate FAISS indices."""
     base_name = f"{phash_bits}_{color_bits}"
     
     # Save to HDF5
@@ -101,18 +101,23 @@ def save_results(output_dir: str, ids: np.ndarray, phashes: np.ndarray, colorhas
             'count': len(ids)
         })
     
-    # Create combined FAISS index
-    total_bits = phash_bits + color_bits
+    # Create separate FAISS indices with ID mapping
+    # Perceptual hash index
+    phash_base_index = faiss.IndexBinaryFlat(phash_bits)
+    phash_index = faiss.IndexBinaryIDMap(phash_base_index)
+    phash_index.add_with_ids(np.packbits(phashes, axis=1), ids.astype(np.int64))
+    faiss.write_index_binary(phash_index, os.path.join(output_dir, f"phash_index_{base_name}.index"))
+    del phash_index, phash_base_index
     
-    # Kombiniere beide Hash-Typen in einem Index
-    combined_hashes = np.concatenate([phashes, colorhashes], axis=1)
-    index = faiss.IndexBinaryFlat(total_bits)
-    index.add(np.packbits(combined_hashes, axis=1))
-    faiss.write_index_binary(index, os.path.join(output_dir, f"combined_index_{base_name}.index"))
-    del index
+    # Color hash index
+    color_base_index = faiss.IndexBinaryFlat(color_bits)
+    color_index = faiss.IndexBinaryIDMap(color_base_index)
+    color_index.add_with_ids(np.packbits(colorhashes, axis=1), ids.astype(np.int64))
+    faiss.write_index_binary(color_index, os.path.join(output_dir, f"color_index_{base_name}.index"))
+    del color_index, color_base_index
     
     gc.collect()
-    print(f"Saved {len(ids)} hashes and combined index")
+    print(f"Saved {len(ids)} hashes and separate indices (phash: {phash_bits} bits, color: {color_bits} bits)")
 
 
 def main():

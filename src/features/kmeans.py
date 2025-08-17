@@ -66,16 +66,17 @@ def process_image(img_bytes: np.ndarray, colorspace: int, n_colors: int):
 
 def batch_to_h5(h5_path: str, batch_data: Tuple, start_idx: int, end_idx: int, lock: Lock):
     """Write batch to HDF5 file."""
-    colors_batch, counts_batch = batch_data
+    colors_batch, counts_batch, ids_batch = batch_data
     
     with lock:
         with h5py.File(h5_path, "r+") as f:
             f['colors'][start_idx:end_idx] = colors_batch
             f['counts'][start_idx:end_idx] = counts_batch
+            f['ids'][start_idx:end_idx] = ids_batch
             f.attrs["count"] = end_idx
             f.flush()
     
-    del colors_batch, counts_batch
+    del colors_batch, counts_batch, ids_batch
 
 
 def create_output_h5(output_path: str, total_images: int, n_colors: int, colorspace: str, source_file: str):
@@ -84,6 +85,7 @@ def create_output_h5(output_path: str, total_images: int, n_colors: int, colorsp
         with h5py.File(output_path, "w") as f:
             f.create_dataset("colors", (total_images, n_colors, 3), dtype=np.float32)
             f.create_dataset("counts", (total_images, n_colors), dtype=np.int32)
+            f.create_dataset("ids", (total_images,), dtype=np.int64)
             f.attrs.update({
                 "count": 0,
                 "n_colors": n_colors,
@@ -97,7 +99,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("h5_path")
     parser.add_argument("--n", type=int, default=5)
-    parser.add_argument("--colorspace", choices=["lab", "hsv", "rgb"], default="hsv")
+    parser.add_argument("--colorspace", choices=["lab", "hsv", "rgb"], default="rgb")
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--workers", type=int, default=12)
     
@@ -134,6 +136,9 @@ def main():
     print(f"Processing remaining {total_images - already_processed} images")
     
     with h5py.File(args.h5_path, 'r') as input_file:
+        # Check if IDs dataset exists, otherwise use indices
+        has_ids = 'ids' in input_file
+        
         with ThreadPoolExecutor(max_workers=1) as write_executor:
             write_futures = []
             
@@ -146,6 +151,12 @@ def main():
                     
                     # Load batch
                     images_bytes = input_file["jpeg_bytes"][start:end]
+                    
+                    # Load original IDs if available, otherwise use indices
+                    if has_ids:
+                        ids_batch = input_file["ids"][start:end]
+                    else:
+                        ids_batch = np.arange(start, end, dtype=np.int64)
                     
                     # Process batch in parallel
                     batch_centers = []
@@ -174,7 +185,7 @@ def main():
                     write_future = write_executor.submit(
                         batch_to_h5, 
                         output_path, 
-                        (colors_array, counts_array), 
+                        (colors_array, counts_array, ids_batch), 
                         start, 
                         end, 
                         write_lock
